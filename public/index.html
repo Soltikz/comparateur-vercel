@@ -83,6 +83,10 @@
       </div>
       <div class="notice" id="resume" hidden></div>
     </div>
+    <h2>Prix d’achat et coût d’envoi</h2>
+    <p class="muted" style="margin-top:-6px">Facultatif : dépose le fichier des prix d’achat et règle le coût d’envoi pour obtenir un prix conseillé. Tu pourras aussi le faire après l’analyse.</p>
+    <div id="ready-pricing"></div>
+    <p style="margin-top:16px"><button class="ghost" id="skip">Calculer avec les prix déjà dans le fichier (sans relancer l’analyse)</button></p>
   </section>
 
   <!-- 3. Progression -->
@@ -115,7 +119,10 @@
       <div class="tile warn"><b id="t-oos">0</b><span>produits en rupture chez au moins un concurrent</span></div>
     </div>
     <h2>Prix conseillé</h2>
-    <div class="card">
+    <div id="done-pricing"></div>
+  </section>
+  <section hidden>
+    <div class="card" id="pricing">
       <label id="drop2">
         <input type="file" id="cost" accept=".xlsx,.csv" hidden>
         <strong style="font-weight:500">Déposer le fichier des prix d’achat</strong>
@@ -144,6 +151,8 @@
         <label>Soit par produit<input type="text" id="set-parprod" disabled></label>
       </div>
     </div>
+  </section>
+  <section class="step" id="s-done2">
     <div class="tiles" style="margin-top:12px">
       <div class="tile ok"><b id="a-down">0</b><span>à baisser</span></div>
       <div class="tile"><b id="a-keep">0</b><span>à garder</span></div>
@@ -170,7 +179,11 @@ const AVG_SECONDS = 12; // estimation avant d'avoir des mesures
 
 let state = null; // { wb, ws, isCsv, name, layout, tasks, results, key }
 
-function show(step) { document.querySelectorAll('.step').forEach((s) => s.classList.toggle('on', s.id === step)); }
+function show(step) {
+  document.querySelectorAll('.step').forEach((s) => s.classList.toggle('on', s.id === step || (step === 's-done' && s.id === 's-done2')));
+  const slot = step === 's-ready' ? 'ready-pricing' : step === 's-done' ? 'done-pricing' : null;
+  if (slot) $(slot).append($('pricing'));
+}
 
 // ---------- Lecture du fichier ----------
 function parseCsv(text) {
@@ -353,6 +366,7 @@ $('start').onclick = async () => {
   running = false;
   finish();
 };
+$('skip').onclick = () => finish();
 $('pause').onclick = () => { paused = !paused; $('pause').textContent = paused ? 'Reprendre' : 'Mettre en pause'; };
 
 // ---------- Résultats ----------
@@ -464,7 +478,8 @@ function settings() {
   $('set-parprod').value = euro(envoi);
   return { pos: v.pos, marge: v.marge / 100, tva: v.tva / 100, maxvar: Math.max(0.01, v.maxvar / 100), envoi };
 }
-SETTINGS.forEach((k) => $(`set-${k}`).addEventListener('change', () => state && computePricing()));
+SETTINGS.forEach((k) => $(`set-${k}`).addEventListener('input', () => { settings(); if (state && $('s-done').classList.contains('on')) computePricing(); }));
+settings();
 
 async function loadCosts(file) {
   const { wb } = await loadFile(file);
