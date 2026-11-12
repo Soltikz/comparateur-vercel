@@ -19,12 +19,23 @@ Aucune variable d'environnement n'est nécessaire. Option : `ALLOWED_HOSTS` pour
 
 Le premier passage est le plus long : les liens de recherche sont remplacés par les liens directs des produits, ce qui accélère les mois suivants.
 
+## Prix conseillé
+
+Sur la page de résultats, déposer en plus le fichier des **prix d'achat** (bouton « Télécharger le modèle à remplir » pour en avoir un pré-rempli avec les produits) : Marque, Titre du produit, Prix d'achat HT (€). Le **coût d'envoi** se saisit sur la page : coût par commande (emballage + transport), nombre moyen de produits par commande et frais de port payés par le client. Coût par produit = (coût par commande − port payé par le client) ÷ produits par commande.
+
+- **Prix plancher** = (prix d'achat HT + coût d'envoi par produit) × (1 + marge minimum) × (1 + TVA), arrondi au ,99 supérieur.
+- **Prix conseillé** = médiane des concurrents en stock × (1 + positionnement), limitée à ± variation max autour du prix actuel, arrondie au ,99, jamais sous le prix plancher.
+- « Garder » si l'écart avec le prix actuel est inférieur à 1 €.
+- Réglages (positionnement, marge minimum, TVA, variation max, coût d'envoi par commande, produits par commande, port payé par le client) modifiables sur la page ; ils sont mémorisés dans le navigateur.
+- Colonnes ajoutées au fichier : Prix d'achat HT, Coût d'envoi, Prix plancher, Prix conseillé, Conseil.
+
 ## Format attendu du fichier
 
 - Colonnes `… (Lien)` suivies chacune de leur colonne de prix `… (€)`.
 - Colonnes `Marque`, `Titre du produit`, `Mon Prix (€)` et, en option, `Statut` (valeur « en ligne »).
 - Un lien peut être une URL, un lien hypertexte ou une formule `=HYPERLINK("url";"…")`.
 - Quand un prix n'est pas trouvé, la cellule du lien reçoit une note : `introuvable`, `prix non lu` ou `erreur`.
+- Ruptures de stock : la colonne `Ruptures concurrents` (créée automatiquement) liste les sites où le produit est en rupture, et la cellule de prix concernée reçoit la note « Rupture de stock ».
 
 ## Fonctionnement
 
@@ -32,4 +43,7 @@ Le premier passage est le plus long : les liens de recherche sont remplacés par
 - `api/price.js` : une fonction Vercel ouvre le lien dans un Chromium allégé (`@sparticuz/chromium`), trouve le produit et lit le prix :
   - boutiques Shopify : `compare_at_price` sinon `price` (`/products/xxx.js`) ;
   - autres sites : prix barré de la page, sinon prix des données structurées ;
-  - prix en USD convertis en EUR au taux du jour.
+  - prix en USD convertis en EUR au taux du jour ;
+  - stock : disponibilité Shopify, sinon `availability` des données structurées, sinon mentions « rupture / épuisé / sold out » dans la zone produit.
+
+Valeurs par défaut (estimation du 26/10/2026) : 11,15 € par commande, dont 9,18 € de Colissimo payés par le client, soit 1,97 € d'emballage restant à la charge de Point n., réparti sur 3 produits.

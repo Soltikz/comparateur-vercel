@@ -41,6 +41,13 @@
   td.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
   .up { color:var(--err); } .down { color:var(--ok); }
   #error { color:var(--err); margin-top:14px; }
+  .settings { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:20px; }
+  .settings label { font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:4px; }
+  .settings input, .settings select { font:inherit; font-size:14px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); }
+  #drop2 { display:block; border:1.5px dashed #c9c0b5; border-radius:12px; padding:20px; text-align:center; cursor:pointer; }
+  #drop2.over { border-color:var(--ink); background:#f3eee8; }
+  .linkbtn { background:none; color:var(--ink); padding:0; text-decoration:underline; border-radius:0; font-size:13px; }
+  @media (max-width:640px) { .settings { grid-template-columns:repeat(2,1fr); } }
   @media (max-width:640px) { .tiles { grid-template-columns:repeat(2,1fr); } }
 </style>
 </head>
@@ -104,10 +111,54 @@
       <div class="tile err"><b id="t-exp">0</b><span>plus chers</span></div>
       <div class="tile warn"><b id="t-none">0</b><span>sans prix concurrent</span></div>
     </div>
+    <div class="tiles" style="margin-top:12px; grid-template-columns:1fr">
+      <div class="tile warn"><b id="t-oos">0</b><span>produits en rupture chez au moins un concurrent</span></div>
+    </div>
+    <h2>Prix conseillé</h2>
+    <div class="card">
+      <label id="drop2">
+        <input type="file" id="cost" accept=".xlsx,.csv" hidden>
+        <strong style="font-weight:500">Déposer le fichier des prix d’achat</strong>
+        <div class="muted">Colonnes : Marque, Titre du produit, Prix d’achat HT</div>
+      </label>
+      <div class="row" style="margin-top:10px">
+        <span class="muted" id="cost-info">Sans prix d’achat, le conseil se base uniquement sur la concurrence (pas de prix plancher).</span>
+        <button class="linkbtn" id="template">Télécharger le modèle à remplir</button>
+      </div>
+      <div class="settings">
+        <label>Positionnement
+          <select id="set-pos">
+            <option value="-0.05">5 % en dessous</option>
+            <option value="-0.03">3 % en dessous</option>
+            <option value="0" selected>Aligné</option>
+            <option value="0.03">3 % au-dessus</option>
+            <option value="0.05">5 % au-dessus</option>
+          </select>
+        </label>
+        <label>Marge minimum (%)<input type="number" id="set-marge" value="30" min="0" step="1"></label>
+        <label>TVA (%)<input type="number" id="set-tva" value="20" min="0" step="0.1"></label>
+        <label>Variation max (%)<input type="number" id="set-maxvar" value="15" min="1" step="1"></label>
+        <label>Coût d’envoi par commande (€)<input type="number" id="set-envoi" value="11.15" min="0" step="0.01"></label>
+        <label>Produits par commande (moy.)<input type="number" id="set-nbprod" value="3" min="1" step="0.1"></label>
+        <label>Port payé par le client (€)<input type="number" id="set-portclient" value="9.18" min="0" step="0.01"></label>
+        <label>Soit par produit<input type="text" id="set-parprod" disabled></label>
+      </div>
+    </div>
+    <div class="tiles" style="margin-top:12px">
+      <div class="tile ok"><b id="a-down">0</b><span>à baisser</span></div>
+      <div class="tile"><b id="a-keep">0</b><span>à garder</span></div>
+      <div class="tile err"><b id="a-up">0</b><span>à monter</span></div>
+      <div class="tile warn"><b id="a-floor">0</b><span>bloqués par le prix plancher</span></div>
+    </div>
+    <h2>Changements de prix conseillés</h2>
+    <table><thead><tr><th>Produit</th><th class="n">Actuel</th><th class="n">Médiane conc.</th><th class="n">Plancher</th><th class="n">Conseillé</th><th>Conseil</th></tr></thead><tbody id="advice"></tbody></table>
+
     <h2>Les plus chers par rapport à la concurrence</h2>
     <table><thead><tr><th>Produit</th><th class="n">Notre prix</th><th class="n">Moy. concurrents</th><th class="n">Écart</th></tr></thead><tbody id="top-exp"></tbody></table>
     <h2>Les plus compétitifs</h2>
     <table><thead><tr><th>Produit</th><th class="n">Notre prix</th><th class="n">Moy. concurrents</th><th class="n">Écart</th></tr></thead><tbody id="top-cheap"></tbody></table>
+    <h2>Ruptures de stock chez les concurrents</h2>
+    <table><thead><tr><th>Produit</th><th>En rupture chez</th></tr></thead><tbody id="oos"></tbody></table>
     <p style="margin-top:32px"><button class="ghost" id="restart">Analyser un autre fichier</button></p>
   </section>
 </main>
@@ -181,7 +232,7 @@ function findLayout(ws) {
     });
     if (pairs.length) {
       const find = (re) => h.findIndex((x) => re.test(x || ''));
-      return { headerRow: r, pairs, brandCol: find(/marque|brand/i), titleCol: find(/titre|title|produit/i), myPriceCol: find(/mon prix|notre prix|prix point/i), statusCol: find(/^statut|status/i) };
+      return { headerRow: r, pairs, brandCol: find(/marque|brand/i), titleCol: find(/titre|title|produit/i), myPriceCol: find(/mon prix|notre prix|prix point/i), statusCol: find(/^statut|status/i), stockCol: find(/rupture/i) };
     }
   }
   return null;
@@ -257,7 +308,7 @@ const drop = $('drop');
 ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
 drop.addEventListener('drop', (e) => pick(e.dataTransfer.files[0]));
 $('online').onchange = refreshReady;
-$('change').onclick = $('restart').onclick = () => { state = null; $('file').value = ''; show('s-upload'); };
+$('change').onclick = $('restart').onclick = () => { state = null; costs = null; $('file').value = ''; show('s-upload'); };
 
 // ---------- Analyse ----------
 let running = false, paused = false;
@@ -286,7 +337,7 @@ $('start').onclick = async () => {
     $('p-bar').style.width = `${(done / total) * 100}%`;
     const rate = (Date.now() - t0) / 1000 / Math.max(1, done - done0);
     $('p-eta').textContent = done - done0 >= 3 ? `Temps restant : ${fmtDuration(rate * (total - done))}` : 'Calcul du temps restant…';
-    if (last) $('p-last').textContent = `${last.t.site} · ${last.t.label} → ${last.r.price != null ? last.r.price.toFixed(2).replace('.', ',') + ' €' : last.r.status}`;
+    if (last) $('p-last').textContent = `${last.t.site} · ${last.t.label} → ${last.r.price != null ? last.r.price.toFixed(2).replace('.', ',') + ' €' : last.r.status}${last.r.stock === 'rupture' ? ' · rupture de stock' : ''}`;
   };
   update();
   const worker = async () => {
@@ -305,24 +356,53 @@ $('start').onclick = async () => {
 $('pause').onclick = () => { paused = !paused; $('pause').textContent = paused ? 'Reprendre' : 'Mettre en pause'; };
 
 // ---------- Résultats ----------
+const clearNote = (cell) => { cell._comment = undefined; };
+
+// Colonne nommée : réutilisée si elle existe, sinon créée au bout du tableau
+function ensureCol(name, width = 18, re = null) {
+  const { ws, layout } = state;
+  const header = ws.getRow(layout.headerRow);
+  let found = 0, last = 0;
+  header.eachCell((c, col) => {
+    const t = cellText(c);
+    if (t) last = Math.max(last, col);
+    if (!found && (re ? re.test(t) : t.trim().toLowerCase() === name.toLowerCase())) found = col;
+  });
+  if (found) return found;
+  const col = last + 1;
+  header.getCell(col).value = name;
+  header.getCell(col).style = JSON.parse(JSON.stringify(header.getCell(last).style || {}));
+  ws.getColumn(col).width = width;
+  return col;
+}
+const ensureStockCol = () => ensureCol('Ruptures concurrents', 28, /rupture/i);
+
 function applyResults() {
   const { ws, isCsv } = state;
+  const stockCol = ensureStockCol();
+  const ruptures = new Map(); // ligne -> [sites]
   for (const t of state.tasks) {
     const r = state.results[t.key]; if (!r) continue;
     const row = ws.getRow(t.row);
+    const priceCell = row.getCell(t.priceCol), linkCell = row.getCell(t.linkCol);
+    if (!ruptures.has(t.row)) ruptures.set(t.row, []);
+    if (r.stock === 'rupture') ruptures.get(t.row).push(t.site);
     if (r.price != null) {
-      row.getCell(t.priceCol).value = r.price;
-      row.getCell(t.linkCol).value = isCsv ? r.url : { formula: `HYPERLINK("${r.url}","Voir le produit")`, result: 'Voir le produit' };
-      row.getCell(t.linkCol).note = undefined;
+      priceCell.value = r.price;
+      linkCell.value = isCsv ? r.url : { text: r.url, hyperlink: r.url };
+      clearNote(linkCell);
     } else {
-      row.getCell(t.priceCol).value = null;
-      if (!isCsv) row.getCell(t.linkCol).note = `Comparateur : ${r.status}`;
+      priceCell.value = null;
+      if (!isCsv) linkCell.note = `Comparateur : ${r.status}`;
     }
+    if (!isCsv) { if (r.stock === 'rupture') priceCell.note = 'Rupture de stock'; else clearNote(priceCell); }
   }
+  for (const [r, sites] of ruptures) ws.getRow(r).getCell(stockCol).value = sites.length ? sites.join(', ') : null;
+  return ruptures;
 }
 
 function finish() {
-  applyResults();
+  const ruptures = applyResults();
   const { ws, layout } = state;
   const rows = [...new Set(state.tasks.map((t) => t.row))];
   const stats = { cheap: 0, aligned: 0, exp: 0, none: 0 }; const gaps = [];
@@ -352,10 +432,163 @@ function finish() {
       $(id).append(tr);
     }
   };
+  const outList = [...ruptures].filter(([, s]) => s.length).map(([r, s]) => ({ label: `${cellText(ws.getRow(r).getCell(layout.brandCol))} — ${cellText(ws.getRow(r).getCell(layout.titleCol))}`, sites: s }));
+  $('t-oos').textContent = outList.length;
+  $('oos').innerHTML = '';
+  if (!outList.length) $('oos').innerHTML = '<tr><td colspan="2" class="muted">Aucune rupture détectée</td></tr>';
+  outList.sort((a, b) => b.sites.length - a.sites.length).forEach((o) => {
+    const tr = document.createElement('tr'); tr.innerHTML = '<td></td><td></td>';
+    tr.cells[0].textContent = o.label; tr.cells[1].textContent = o.sites.join(', '); $('oos').append(tr);
+  });
   fill('top-exp', gaps.filter((g) => g.gap > 0.05).sort((a, b) => b.gap - a.gap).slice(0, 10));
   fill('top-cheap', gaps.filter((g) => g.gap < -0.05).sort((a, b) => a.gap - b.gap).slice(0, 10));
+  computePricing();
   show('s-done');
 }
+
+// ---------- Prix conseillé ----------
+let costs = null; // { byKey: Map, byTitle: Map, rows }
+const norm = (x) => (x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const euro = (x) => (x == null ? '—' : x.toFixed(2).replace('.', ',') + ' €');
+const median = (a) => { const b = [...a].sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+const to99 = (x) => Math.max(0.99, Math.round(x + 0.01) - 0.01);   // ,99 le plus proche
+const up99 = (x) => Math.ceil(x + 0.01 - 1e-9) - 0.01;             // ,99 juste au-dessus
+
+const SETTINGS = ['pos', 'marge', 'tva', 'maxvar', 'envoi', 'nbprod', 'portclient'];
+try { const saved = JSON.parse(localStorage.getItem('comparateur:settings')); if (saved) SETTINGS.forEach((k) => saved[k] != null && ($(`set-${k}`).value = saved[k])); } catch {}
+function settings() {
+  const v = Object.fromEntries(SETTINGS.map((k) => [k, parseFloat($(`set-${k}`).value) || 0]));
+  try { localStorage.setItem('comparateur:settings', JSON.stringify(v)); } catch {}
+  // Coût d'envoi réparti sur les produits de la commande, moins ce que le client paie déjà
+  const envoi = Math.max(0, v.envoi - v.portclient) / Math.max(1, v.nbprod);
+  $('set-parprod').value = euro(envoi);
+  return { pos: v.pos, marge: v.marge / 100, tva: v.tva / 100, maxvar: Math.max(0.01, v.maxvar / 100), envoi };
+}
+SETTINGS.forEach((k) => $(`set-${k}`).addEventListener('change', () => state && computePricing()));
+
+async function loadCosts(file) {
+  const { wb } = await loadFile(file);
+  for (const ws of wb.worksheets) {
+    for (let r = 1; r <= Math.min(5, ws.rowCount); r++) {
+      const h = []; ws.getRow(r).eachCell({ includeEmpty: true }, (c, col) => (h[col] = cellText(c)));
+      const find = (re) => h.findIndex((x) => re.test(x || ''));
+      const cAchat = find(/achat|co[uû]t produit|purchase|cost/i);
+      if (cAchat < 0) continue;
+      const cBrand = find(/marque|brand/i), cTitle = find(/titre|produit|nom|title/i);
+      const byKey = new Map(), byTitle = new Map(); let rows = 0;
+      for (let i = r + 1; i <= ws.rowCount; i++) {
+        const row = ws.getRow(i);
+        const achat = cellNum(row.getCell(cAchat)); if (achat == null) continue;
+        const brand = cBrand > 0 ? cellText(row.getCell(cBrand)) : '', title = cTitle > 0 ? cellText(row.getCell(cTitle)) : '';
+        byKey.set(norm(`${brand} ${title}`), { achat }); byTitle.set(norm(title), { achat }); rows++;
+      }
+      return { byKey, byTitle, rows };
+    }
+  }
+  throw new Error('aucune colonne « Prix d’achat » trouvée');
+}
+
+async function pickCosts(file) {
+  if (!file) return;
+  try { costs = await loadCosts(file); $('cost-info').textContent = `${file.name} : ${costs.rows} prix d’achat chargés.`; computePricing(); }
+  catch (e) { $('cost-info').textContent = `Fichier des prix d’achat illisible (${e.message}).`; }
+}
+$('cost').onchange = (e) => pickCosts(e.target.files[0]);
+const drop2 = $('drop2');
+['dragenter', 'dragover'].forEach((ev) => drop2.addEventListener(ev, (e) => { e.preventDefault(); drop2.classList.add('over'); }));
+['dragleave', 'drop'].forEach((ev) => drop2.addEventListener(ev, (e) => { e.preventDefault(); drop2.classList.remove('over'); }));
+drop2.addEventListener('drop', (e) => pickCosts(e.dataTransfer.files[0]));
+
+function computePricing() {
+  const { ws, layout } = state;
+  const S = settings();
+  const rows = [...new Set(state.tasks.map((t) => t.row))];
+  const col = {
+    achat: costs ? ensureCol('Prix d’achat HT (€)', 16, /achat/i) : 0,
+    envoi: costs ? ensureCol('Coût d’envoi (€)', 14, /envoi/i) : 0,
+    floor: ensureCol('Prix plancher (€)', 14, /plancher/i),
+    rec: ensureCol('Prix conseillé (€)', 16, /prix conseill/i),
+    advice: ensureCol('Conseil', 34, /^conseil$/i),
+  };
+  const money = '#,##0.00 "€"';
+  const count = { down: 0, keep: 0, up: 0, floor: 0 }; const changes = []; let matched = 0;
+
+  for (const r of rows) {
+    const row = ws.getRow(r);
+    const brand = cellText(row.getCell(layout.brandCol)), title = cellText(row.getCell(layout.titleCol));
+    const mine = layout.myPriceCol > 0 ? cellNum(row.getCell(layout.myPriceCol)) : null;
+    const comp = []; let anyPrice = false;
+    for (const p of layout.pairs) {
+      const price = cellNum(row.getCell(p.priceCol));
+      if (price == null || price <= 0) continue;
+      anyPrice = true;
+      if (state.results[`${r}:${p.linkCol}`]?.stock !== 'rupture') comp.push(price);
+    }
+    const cost = costs && (costs.byKey.get(norm(`${brand} ${title}`)) || costs.byTitle.get(norm(title)) || costs.byTitle.get(norm(title.replace(/\s*\(.*?\)\s*$/, ''))));
+    if (cost) matched++;
+    const envoi = S.envoi;
+    const floor = cost ? up99((cost.achat + envoi) * (1 + S.marge) * (1 + S.tva)) : null;
+    const ref = comp.length ? median(comp) : null;
+
+    let rec = null, advice, type = null;
+    if (ref == null) {
+      rec = mine;
+      advice = anyPrice ? 'Opportunité : en rupture chez tous les concurrents' : 'Pas de prix concurrent';
+    } else {
+      let target = ref * (1 + S.pos);
+      if (mine != null) target = Math.min(mine * (1 + S.maxvar), Math.max(mine * (1 - S.maxvar), target));
+      rec = to99(target);
+      if (mine != null && Math.abs(rec - mine) < 1) rec = mine;
+    }
+    let floored = false;
+    if (floor != null && rec != null && rec < floor) { rec = floor; floored = true; }
+    if (mine == null || rec == null) { if (ref != null) advice = 'Prix actuel manquant'; }
+    else if (rec === mine && !floored) { advice ??= 'Garder'; type = 'keep'; }
+    else {
+      const d = (rec - mine) / mine, pct = `${d > 0 ? '+' : '−'}${Math.abs(d * 100).toFixed(0)} %`;
+      if (Math.abs(rec - mine) < 0.005) { advice = 'Garder (au prix plancher)'; type = 'keep'; }
+      else { advice = `${rec > mine ? 'Monter' : 'Baisser'} à ${euro(rec)} (${pct})${floored ? ' — prix plancher' : ''}`; type = rec > mine ? 'up' : 'down'; }
+      if (ref != null && floored && floor > ref) advice += ' · concurrents sous notre coût';
+    }
+    if (type) count[type]++;
+    if (floored) count.floor++;
+    if (type === 'up' || type === 'down') changes.push({ label: `${brand} — ${title}`, mine, ref, floor, rec, advice, type, impact: Math.abs(rec - mine) / mine });
+
+    if (col.achat) { row.getCell(col.achat).value = cost ? cost.achat : null; row.getCell(col.achat).numFmt = money; }
+    if (col.envoi) { row.getCell(col.envoi).value = cost ? Math.round(envoi * 100) / 100 : null; row.getCell(col.envoi).numFmt = money; }
+    row.getCell(col.floor).value = floor; row.getCell(col.floor).numFmt = money;
+    row.getCell(col.rec).value = rec; row.getCell(col.rec).numFmt = money;
+    row.getCell(col.advice).value = advice || null;
+  }
+
+  if (costs) $('cost-info').textContent = `${matched} produits sur ${rows.length} retrouvés dans le fichier des prix d’achat${matched < rows.length ? ' — les autres n’ont pas de prix plancher' : ''}.`;
+  $('a-down').textContent = count.down; $('a-keep').textContent = count.keep; $('a-up').textContent = count.up; $('a-floor').textContent = count.floor;
+  $('advice').innerHTML = '';
+  if (!changes.length) $('advice').innerHTML = '<tr><td colspan="6" class="muted">Aucun changement conseillé</td></tr>';
+  changes.sort((a, b) => b.impact - a.impact).slice(0, 25).forEach((c) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td></td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td><td></td>';
+    [c.label, euro(c.mine), euro(c.ref), euro(c.floor), euro(c.rec), c.advice].forEach((v, i) => (tr.cells[i].textContent = v));
+    tr.cells[5].className = c.type === 'up' ? 'up' : 'down';
+    $('advice').append(tr);
+  });
+}
+
+$('template').onclick = async () => {
+  const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Prix d’achat');
+  ws.columns = [{ header: 'Marque', width: 20 }, { header: 'Titre du produit', width: 50 }, { header: 'Prix d’achat HT (€)', width: 20 }];
+  ws.getRow(1).font = { bold: true };
+  const { layout } = state; const seen = new Set();
+  for (const t of state.tasks) {
+    if (seen.has(t.row)) continue; seen.add(t.row);
+    const row = state.ws.getRow(t.row);
+    ws.addRow([cellText(row.getCell(layout.brandCol)), cellText(row.getCell(layout.titleCol)), null]);
+  }
+  ws.getColumn(3).numFmt = '#,##0.00 "€"';
+  const blob = new Blob([await wb.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'modele_prix_achat.xlsx'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
 
 $('download').onclick = async () => {
   const base = state.name.replace(/\.(csv|xlsx)$/i, '');
