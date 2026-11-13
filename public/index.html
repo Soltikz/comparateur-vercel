@@ -118,6 +118,14 @@
   .dlbar .muted { color:#bfb4a7; }
   .dlbar button { background:#fff; color:var(--ink); }
 
+  .collapsed #pricing-body { display:none; }
+  .summary { display:none; }
+  .collapsed .summary { display:flex; }
+  .summary .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { font-size:13px; padding:6px 12px; border-radius:999px; background:var(--soft); }
+  details.missing { margin-top:8px; font-size:13px; color:var(--muted); }
+  details.missing summary { cursor:pointer; color:var(--accent); }
+  details.missing ul { margin:8px 0 0; padding-left:18px; max-height:180px; overflow:auto; }
   #error { color:var(--err); margin-top:14px; font-size:14px; }
   @media (max-width:900px) { .groups, .feat { grid-template-columns:1fr; } .tiles { grid-template-columns:repeat(2,1fr); } .stepper li span { display:none; } .grid2 { grid-template-columns:1fr; } .hero h1 { font-size:34px; } }
 </style>
@@ -245,6 +253,11 @@
   <!-- Carte des prix d'achat et réglages (déplacée entre l'étape 2 et les résultats) -->
   <div hidden>
     <div class="card" id="pricing">
+      <div class="summary row">
+        <div class="chips" id="pricing-chips"></div>
+        <button class="ghost" id="edit-pricing">Modifier les réglages</button>
+      </div>
+      <div id="pricing-body">
       <div class="grid2" style="align-items:center">
         <label class="drop small" id="drop2">
           <input type="file" id="cost" accept=".xlsx,.csv" hidden>
@@ -254,6 +267,7 @@
         </label>
         <div>
           <div class="muted" id="cost-info">Sans prix d’achat, le conseil se base uniquement sur la concurrence (pas de prix plancher).</div>
+          <details class="missing" id="missing" hidden><summary></summary><ul></ul></details>
           <p style="margin:12px 0 0"><button class="linkbtn" id="template">Télécharger le modèle à remplir</button></p>
         </div>
       </div>
@@ -295,6 +309,10 @@
           <p class="muted" style="margin:14px 0 0">Ex. −5 pour vendre 5 % moins cher en boutique, +5 pour 5 % plus cher.</p>
         </div>
       </div>
+      <div class="row" style="margin-top:20px;justify-content:flex-end" id="apply-wrap" hidden>
+        <button id="apply-pricing">Appliquer et replier</button>
+      </div>
+      </div>
     </div>
   </div>
 </main>
@@ -322,6 +340,9 @@ function show(step) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
   const slot = step === 's-ready' ? 'ready-pricing' : step === 's-done' ? 'done-pricing' : null;
   if (slot) $(slot).append($('pricing'));
+  $('apply-wrap').hidden = step !== 's-done';
+  if (step === 's-ready') collapse(false);
+  if (step === 's-done') collapse(true);
 }
 
 // ---------- Lecture du fichier ----------
@@ -714,6 +735,23 @@ const drop2 = $('drop2');
 ['dragleave', 'drop'].forEach((ev) => drop2.addEventListener(ev, (e) => { e.preventDefault(); drop2.classList.remove('over'); }));
 drop2.addEventListener('drop', (e) => pickCosts(e.dataTransfer.files[0]));
 
+function updateChips() {
+  const S = settings();
+  const pos = $('set-pos').selectedOptions[0].textContent;
+  const chips = [
+    costs ? `Prix d’achat : ${$('cost-info').textContent.split(' :')[0]}` : 'Sans prix d’achat',
+    `Positionnement : ${pos.toLowerCase()}`,
+    `Marge min. ${$('set-marge').value} %`,
+    `Envoi : ${$('set-parprod').value.split(' (')[0]} / produit`,
+    S.shop ? `Boutique : ${S.shopadj > 0 ? '+' : ''}${Math.round(S.shopadj * 100)} %` : 'Pas de prix boutique',
+  ];
+  $('pricing-chips').innerHTML = '';
+  chips.forEach((c) => { const sp = document.createElement('span'); sp.className = 'chip'; sp.textContent = c; $('pricing-chips').append(sp); });
+}
+const collapse = (on) => { $('pricing').classList.toggle('collapsed', on); if (on) updateChips(); };
+$('edit-pricing').onclick = () => collapse(false);
+$('apply-pricing').onclick = () => { computePricing(); collapse(true); $('done-pricing').scrollIntoView({ behavior: 'smooth' }); };
+
 function computePricing() {
   const { ws, layout } = state;
   const S = settings();
@@ -792,8 +830,11 @@ function computePricing() {
 
   if (costs) {
     const found = how.ean + how.nom + how['nom approché'];
-    $('cost-info').textContent = `${found} produits sur ${rows.length} retrouvés : ${how.ean} par code-barres, ${how.nom} par nom, ${how['nom approché']} par nom approché.` +
-      (missing.length ? ` Sans prix d’achat (pas de prix plancher) : ${missing.slice(0, 8).join(' · ')}${missing.length > 8 ? ` … et ${missing.length - 8} autres` : ''}.` : '');
+    $('cost-info').textContent = `${found} produits sur ${rows.length} retrouvés : ${how.ean} par code-barres, ${how.nom} par nom, ${how['nom approché']} par nom approché.`;
+    const det = $('missing'); det.hidden = !missing.length;
+    det.querySelector('summary').textContent = `Voir les ${missing.length} produits sans prix d’achat`;
+    const ul = det.querySelector('ul'); ul.innerHTML = '';
+    missing.forEach((m) => { const li = document.createElement('li'); li.textContent = m; ul.append(li); });
   }
   $('a-down').textContent = count.down; $('a-keep').textContent = count.keep; $('a-up').textContent = count.up; $('a-floor').textContent = count.floor;
   $('advice').innerHTML = '';
