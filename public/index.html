@@ -63,6 +63,7 @@
       <strong>Déposer le fichier</strong>
       <span>Glisse le fichier Excel (.xlsx) ou CSV ici, ou clique pour le choisir</span>
     </label>
+    <p class="muted" style="margin-top:14px">Étape suivante : tu pourras ajouter le fichier des prix d’achat et régler le coût d’envoi pour obtenir un prix conseillé.</p>
     <div id="error"></div>
   </section>
 
@@ -126,7 +127,7 @@
       <label id="drop2">
         <input type="file" id="cost" accept=".xlsx,.csv" hidden>
         <strong style="font-weight:500">Déposer le fichier des prix d’achat</strong>
-        <div class="muted">Colonnes : Marque, Titre du produit, Prix d’achat HT</div>
+        <div class="muted">Export « État des stocks » de Planity ou tout fichier avec : code-barres (EAN) ou nom du produit, et prix d’achat HT</div>
       </label>
       <div class="row" style="margin-top:10px">
         <span class="muted" id="cost-info">Sans prix d’achat, le conseil se base uniquement sur la concurrence (pas de prix plancher).</span>
@@ -148,7 +149,15 @@
         <label>Coût d’envoi par commande (€)<input type="number" id="set-envoi" value="11.15" min="0" step="0.01"></label>
         <label>Produits par commande (moy.)<input type="number" id="set-nbprod" value="3" min="1" step="0.1"></label>
         <label>Port payé par le client (€)<input type="number" id="set-portclient" value="9.18" min="0" step="0.01"></label>
+        <label>Préparation par commande (min)<input type="number" id="set-prepmin" value="0" min="0" step="1"></label>
+        <label>Coût horaire chargé (€/h)<input type="number" id="set-taux" value="0" min="0" step="0.5"></label>
         <label>Soit par produit<input type="text" id="set-parprod" disabled></label>
+      </div>
+      <div class="settings">
+        <label style="flex-direction:row;align-items:center;gap:8px;grid-column:span 2;color:var(--ink);font-size:14px">
+          <input type="checkbox" id="set-shop"> Calculer aussi un prix pour les boutiques physiques (sans envoi)
+        </label>
+        <label>Écart boutique / site (%)<input type="number" id="set-shopadj" value="0" step="1"></label>
       </div>
     </div>
   </section>
@@ -160,7 +169,7 @@
       <div class="tile warn"><b id="a-floor">0</b><span>bloqués par le prix plancher</span></div>
     </div>
     <h2>Changements de prix conseillés</h2>
-    <table><thead><tr><th>Produit</th><th class="n">Actuel</th><th class="n">Médiane conc.</th><th class="n">Plancher</th><th class="n">Conseillé</th><th>Conseil</th></tr></thead><tbody id="advice"></tbody></table>
+    <table><thead><tr><th>Produit</th><th class="n">Actuel</th><th class="n">Médiane conc.</th><th class="n">Plancher</th><th class="n">Conseillé site</th><th class="n shopcol">Conseillé boutique</th><th>Conseil</th></tr></thead><tbody id="advice"></tbody></table>
 
     <h2>Les plus chers par rapport à la concurrence</h2>
     <table><thead><tr><th>Produit</th><th class="n">Notre prix</th><th class="n">Moy. concurrents</th><th class="n">Écart</th></tr></thead><tbody id="top-exp"></tbody></table>
@@ -201,10 +210,29 @@ function parseCsv(text) {
   return { rows: rows.filter((r) => r.some((v) => v !== '')), sep };
 }
 
+// Un fichier réenregistré par Excel, Google Sheets ou un autre outil peut ranger
+// tableaux, notes et dessins à des chemins que la bibliothèque ExcelJS ne reconnaît pas :
+// on les remet aux emplacements qu'elle attend avant de lire le fichier.
 async function fixAbsoluteTargets(buf) {
   const zip = await JSZip.loadAsync(buf);
+  let k = 900;
+  const resolve = (target) => (target.startsWith('/') ? target.slice(1) : 'xl/' + target.replace(/^\.\.\//, ''));
   for (const f of Object.keys(zip.files).filter((f) => /^xl\/worksheets\/_rels\/.*\.rels$/.test(f))) {
-    zip.file(f, (await zip.file(f).async('string')).replace(/Target="\/xl\//g, 'Target="../'));
+    let xml = await zip.file(f).async('string');
+    const moves = [];
+    xml = xml.replace(/<Relationship\b[^>]*>/g, (tag) => {
+      const type = tag.match(/Type="[^"]*\/(comments|vmlDrawing)"/)?.[1];
+      const target = tag.match(/Target="([^"]+)"/)?.[1];
+      if (!type || !target) return tag;
+      const from = resolve(target);
+      const ok = type === 'comments' ? /^xl\/comments\d+\.xml$/.test(from) : /^xl\/drawings\/vmlDrawing\d+\.vml$/.test(from);
+      if (ok || !zip.file(from)) return tag;
+      const to = type === 'comments' ? `xl/comments${++k}.xml` : `xl/drawings/vmlDrawing${++k}.vml`;
+      moves.push([from, to]);
+      return tag.replace(/Target="[^"]+"/, `Target="../${to.slice(3)}"`);
+    });
+    for (const [from, to] of moves) { zip.file(to, await zip.file(from).async('uint8array')); zip.remove(from); }
+    zip.file(f, xml.replace(/Target="\/xl\//g, 'Target="../'));
   }
   return zip.generateAsync({ type: 'arraybuffer' });
 }
@@ -245,7 +273,7 @@ function findLayout(ws) {
     });
     if (pairs.length) {
       const find = (re) => h.findIndex((x) => re.test(x || ''));
-      return { headerRow: r, pairs, brandCol: find(/marque|brand/i), titleCol: find(/titre|title|produit/i), myPriceCol: find(/mon prix|notre prix|prix point/i), statusCol: find(/^statut|status/i), stockCol: find(/rupture/i) };
+      return { headerRow: r, pairs, brandCol: find(/marque|brand/i), titleCol: find(/titre|title|produit/i), myPriceCol: find(/mon prix|notre prix|prix point/i), statusCol: find(/^statut|status/i), stockCol: find(/rupture/i), eanCol: find(/ean|code.?barre|gtin|barcode/i) };
     }
   }
   return null;
@@ -468,18 +496,47 @@ const median = (a) => { const b = [...a].sort((x, y) => x - y), m = b.length >> 
 const to99 = (x) => Math.max(0.99, Math.round(x + 0.01) - 0.01);   // ,99 le plus proche
 const up99 = (x) => Math.ceil(x + 0.01 - 1e-9) - 0.01;             // ,99 juste au-dessus
 
-const SETTINGS = ['pos', 'marge', 'tva', 'maxvar', 'envoi', 'nbprod', 'portclient'];
-try { const saved = JSON.parse(localStorage.getItem('comparateur:settings')); if (saved) SETTINGS.forEach((k) => saved[k] != null && ($(`set-${k}`).value = saved[k])); } catch {}
+const SETTINGS = ['pos', 'marge', 'tva', 'maxvar', 'envoi', 'nbprod', 'portclient', 'prepmin', 'taux', 'shopadj'];
+try { const saved = JSON.parse(localStorage.getItem('comparateur:settings')); if (saved) { SETTINGS.forEach((k) => saved[k] != null && ($(`set-${k}`).value = saved[k])); $('set-shop').checked = !!saved.shop; } } catch {}
 function settings() {
   const v = Object.fromEntries(SETTINGS.map((k) => [k, parseFloat($(`set-${k}`).value) || 0]));
+  v.shop = $('set-shop').checked;
+  $('set-shopadj').disabled = !v.shop;
   try { localStorage.setItem('comparateur:settings', JSON.stringify(v)); } catch {}
   // Coût d'envoi réparti sur les produits de la commande, moins ce que le client paie déjà
-  const envoi = Math.max(0, v.envoi - v.portclient) / Math.max(1, v.nbprod);
-  $('set-parprod').value = euro(envoi);
-  return { pos: v.pos, marge: v.marge / 100, tva: v.tva / 100, maxvar: Math.max(0.01, v.maxvar / 100), envoi };
+  // + temps de préparation (emballage, étiquette, dépôt) au coût horaire chargé
+  const personnel = (v.prepmin / 60) * v.taux;
+  const envoi = (Math.max(0, v.envoi - v.portclient) + personnel) / Math.max(1, v.nbprod);
+  $('set-parprod').value = euro(envoi) + (personnel ? ` (dont personnel ${euro(personnel / Math.max(1, v.nbprod))})` : '');
+  return { pos: v.pos, marge: v.marge / 100, tva: v.tva / 100, maxvar: Math.max(0.01, v.maxvar / 100), envoi, shop: v.shop, shopadj: v.shopadj / 100 };
 }
-SETTINGS.forEach((k) => $(`set-${k}`).addEventListener('input', () => { settings(); if (state && $('s-done').classList.contains('on')) computePricing(); }));
+[...SETTINGS, 'shop'].forEach((k) => $(`set-${k}`).addEventListener('input', () => { settings(); if (state && $('s-done').classList.contains('on')) computePricing(); }));
 settings();
+
+// Code-barres : chiffres uniquement, sans zéros en tête (EAN-13 / UPC-12 équivalents)
+const normEan = (x) => String(x || '').replace(/\.0+$/, '').replace(/\D/g, '').replace(/^0+/, '');
+// Mots significatifs d'un nom : sans contenance (80ml, x80, 30 g…) ni mots vides
+const STOP = new Set(['the', 'and', 'de', 'la', 'le', 'les', 'du', 'des', 'et', 'ml', 'g', 'pcs', 'pc', 'ea']);
+const nameTokens = (x) => new Set(norm(x).split(' ').filter((t) => t.length > 1 && !STOP.has(t) && !/^x?\d+(ml|g|pcs|ea)?$/.test(t)));
+
+function matchCost(ean, brand, title) {
+  if (!costs) return null;
+  const e = normEan(ean);
+  if (e && costs.byEan.has(e)) return { ...costs.byEan.get(e), how: 'ean' };
+  const exact = costs.byKey.get(norm(`${brand} ${title}`)) || costs.byTitle.get(norm(title)) || costs.byTitle.get(norm(title.replace(/\s*\(.*?\)\s*$/, '')));
+  if (exact) return { ...exact, how: 'nom' };
+  // Nom approché : la marque peut être abrégée (« ABI » pour Abib), on compare surtout le titre
+  const t = nameTokens(title); if (t.size < 2) return null;
+  const b = norm(brand).split(' ')[0] || '';
+  let best = null, second = 0;
+  for (const c of costs.list) {
+    let common = 0; t.forEach((w) => c.tokens.has(w) && common++);
+    const brandOk = !b || [...c.tokens].some((w) => w.startsWith(b.slice(0, 3)) || b.startsWith(w));
+    const score = common / t.size - (brandOk ? 0 : 0.3);
+    if (!best || score > best.score) { second = best ? best.score : 0; best = { c, score }; } else if (score > second) second = score;
+  }
+  return best && best.score >= 0.75 && best.score - second >= 0.15 ? { ...best.c, how: 'nom approché' } : null;
+}
 
 async function loadCosts(file) {
   const { wb } = await loadFile(file);
@@ -487,17 +544,23 @@ async function loadCosts(file) {
     for (let r = 1; r <= Math.min(5, ws.rowCount); r++) {
       const h = []; ws.getRow(r).eachCell({ includeEmpty: true }, (c, col) => (h[col] = cellText(c)));
       const find = (re) => h.findIndex((x) => re.test(x || ''));
-      const cAchat = find(/achat|co[uû]t produit|purchase|cost/i);
+      const cAchat = find(/achat|co[uû]t|purchase|cost|\bpa\b|pmp/i);
       if (cAchat < 0) continue;
-      const cBrand = find(/marque|brand/i), cTitle = find(/titre|produit|nom|title/i);
-      const byKey = new Map(), byTitle = new Map(); let rows = 0;
+      const cEan = find(/ean|code.?barre|gtin|barcode/i);
+      const cBrand = find(/marque|brand|fournisseur/i);
+      const cTitle = h.findIndex((x, i) => i !== cAchat && i !== cEan && /titre|produit|nom|title|libell|d[ée]signation|article/i.test(x || ''));
+      const byEan = new Map(), byKey = new Map(), byTitle = new Map(), list = []; let rows = 0;
       for (let i = r + 1; i <= ws.rowCount; i++) {
         const row = ws.getRow(i);
-        const achat = cellNum(row.getCell(cAchat)); if (achat == null) continue;
+        const achat = cellNum(row.getCell(cAchat)); if (achat == null || achat <= 0) continue;
         const brand = cBrand > 0 ? cellText(row.getCell(cBrand)) : '', title = cTitle > 0 ? cellText(row.getCell(cTitle)) : '';
-        byKey.set(norm(`${brand} ${title}`), { achat }); byTitle.set(norm(title), { achat }); rows++;
+        const item = { achat, name: `${brand} ${title}`.trim() };
+        const ean = cEan > 0 ? normEan(cellText(row.getCell(cEan))) : '';
+        if (ean) byEan.set(ean, item);
+        if (title) { byKey.set(norm(`${brand} ${title}`), item); byTitle.set(norm(title), item); list.push({ ...item, tokens: nameTokens(`${brand} ${title}`) }); }
+        rows++;
       }
-      return { byKey, byTitle, rows };
+      return { byEan, byKey, byTitle, list, rows };
     }
   }
   throw new Error('aucune colonne « Prix d’achat » trouvée');
@@ -505,7 +568,11 @@ async function loadCosts(file) {
 
 async function pickCosts(file) {
   if (!file) return;
-  try { costs = await loadCosts(file); $('cost-info').textContent = `${file.name} : ${costs.rows} prix d’achat chargés.`; computePricing(); }
+  try {
+    costs = await loadCosts(file);
+    $('cost-info').textContent = `${file.name} : ${costs.rows} prix d’achat chargés (${costs.byEan.size} avec code-barres).`;
+    if ($('s-done').classList.contains('on')) computePricing();
+  }
   catch (e) { $('cost-info').textContent = `Fichier des prix d’achat illisible (${e.message}).`; }
 }
 $('cost').onchange = (e) => pickCosts(e.target.files[0]);
@@ -524,9 +591,12 @@ function computePricing() {
     floor: ensureCol('Prix plancher (€)', 14, /plancher/i),
     rec: ensureCol('Prix conseillé (€)', 16, /prix conseill/i),
     advice: ensureCol('Conseil', 34, /^conseil$/i),
+    shopFloor: S.shop ? ensureCol('Prix plancher boutique (€)', 16, /plancher boutique/i) : 0,
+    shopRec: S.shop ? ensureCol('Prix conseillé boutique (€)', 18, /conseill.* boutique/i) : 0,
   };
   const money = '#,##0.00 "€"';
-  const count = { down: 0, keep: 0, up: 0, floor: 0 }; const changes = []; let matched = 0;
+  const count = { down: 0, keep: 0, up: 0, floor: 0 }; const changes = [];
+  const how = { ean: 0, nom: 0, 'nom approché': 0 }; const missing = [];
 
   for (const r of rows) {
     const row = ws.getRow(r);
@@ -539,8 +609,9 @@ function computePricing() {
       anyPrice = true;
       if (state.results[`${r}:${p.linkCol}`]?.stock !== 'rupture') comp.push(price);
     }
-    const cost = costs && (costs.byKey.get(norm(`${brand} ${title}`)) || costs.byTitle.get(norm(title)) || costs.byTitle.get(norm(title.replace(/\s*\(.*?\)\s*$/, ''))));
-    if (cost) matched++;
+    const ean = layout.eanCol > 0 ? cellText(row.getCell(layout.eanCol)) : '';
+    const cost = matchCost(ean, brand, title);
+    if (cost) how[cost.how]++; else if (costs) missing.push(`${brand} — ${title}`);
     const envoi = S.envoi;
     const floor = cost ? up99((cost.achat + envoi) * (1 + S.marge) * (1 + S.tva)) : null;
     const ref = comp.length ? median(comp) : null;
@@ -565,41 +636,57 @@ function computePricing() {
       else { advice = `${rec > mine ? 'Monter' : 'Baisser'} à ${euro(rec)} (${pct})${floored ? ' — prix plancher' : ''}`; type = rec > mine ? 'up' : 'down'; }
       if (ref != null && floored && floor > ref) advice += ' · concurrents sous notre coût';
     }
+    // Boutique physique : pas d'envoi, donc plancher plus bas ; prix = prix site ± écart choisi
+    let shopFloor = null, shopRec = null;
+    if (S.shop) {
+      shopFloor = cost ? up99(cost.achat * (1 + S.marge) * (1 + S.tva)) : null;
+      const base = rec ?? mine;
+      if (base != null) shopRec = S.shopadj ? to99(base * (1 + S.shopadj)) : base;
+      if (shopFloor != null && shopRec != null && shopRec < shopFloor) shopRec = shopFloor;
+    }
     if (type) count[type]++;
     if (floored) count.floor++;
-    if (type === 'up' || type === 'down') changes.push({ label: `${brand} — ${title}`, mine, ref, floor, rec, advice, type, impact: Math.abs(rec - mine) / mine });
+    if (type === 'up' || type === 'down') changes.push({ label: `${brand} — ${title}`, mine, ref, floor, rec, shopRec, advice, type, impact: Math.abs(rec - mine) / mine });
 
     if (col.achat) { row.getCell(col.achat).value = cost ? cost.achat : null; row.getCell(col.achat).numFmt = money; }
     if (col.envoi) { row.getCell(col.envoi).value = cost ? Math.round(envoi * 100) / 100 : null; row.getCell(col.envoi).numFmt = money; }
     row.getCell(col.floor).value = floor; row.getCell(col.floor).numFmt = money;
     row.getCell(col.rec).value = rec; row.getCell(col.rec).numFmt = money;
     row.getCell(col.advice).value = advice || null;
+    if (col.shopFloor) { row.getCell(col.shopFloor).value = shopFloor; row.getCell(col.shopFloor).numFmt = money; }
+    if (col.shopRec) { row.getCell(col.shopRec).value = shopRec; row.getCell(col.shopRec).numFmt = money; }
   }
 
-  if (costs) $('cost-info').textContent = `${matched} produits sur ${rows.length} retrouvés dans le fichier des prix d’achat${matched < rows.length ? ' — les autres n’ont pas de prix plancher' : ''}.`;
+  if (costs) {
+    const found = how.ean + how.nom + how['nom approché'];
+    $('cost-info').textContent = `${found} produits sur ${rows.length} retrouvés : ${how.ean} par code-barres, ${how.nom} par nom, ${how['nom approché']} par nom approché.` +
+      (missing.length ? ` Sans prix d’achat (pas de prix plancher) : ${missing.slice(0, 8).join(' · ')}${missing.length > 8 ? ` … et ${missing.length - 8} autres` : ''}.` : '');
+  }
   $('a-down').textContent = count.down; $('a-keep').textContent = count.keep; $('a-up').textContent = count.up; $('a-floor').textContent = count.floor;
   $('advice').innerHTML = '';
-  if (!changes.length) $('advice').innerHTML = '<tr><td colspan="6" class="muted">Aucun changement conseillé</td></tr>';
+  document.querySelectorAll('.shopcol').forEach((e) => (e.style.display = S.shop ? '' : 'none'));
+  if (!changes.length) $('advice').innerHTML = '<tr><td colspan="7" class="muted">Aucun changement conseillé</td></tr>';
   changes.sort((a, b) => b.impact - a.impact).slice(0, 25).forEach((c) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td></td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td><td></td>';
-    [c.label, euro(c.mine), euro(c.ref), euro(c.floor), euro(c.rec), c.advice].forEach((v, i) => (tr.cells[i].textContent = v));
-    tr.cells[5].className = c.type === 'up' ? 'up' : 'down';
+    tr.innerHTML = '<td></td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n shopcol"></td><td></td>';
+    [c.label, euro(c.mine), euro(c.ref), euro(c.floor), euro(c.rec), euro(c.shopRec), c.advice].forEach((v, i) => (tr.cells[i].textContent = v));
+    tr.cells[5].style.display = S.shop ? '' : 'none';
+    tr.cells[6].className = c.type === 'up' ? 'up' : 'down';
     $('advice').append(tr);
   });
 }
 
 $('template').onclick = async () => {
   const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Prix d’achat');
-  ws.columns = [{ header: 'Marque', width: 20 }, { header: 'Titre du produit', width: 50 }, { header: 'Prix d’achat HT (€)', width: 20 }];
+  ws.columns = [{ header: 'Code-barres', width: 18 }, { header: 'Marque', width: 20 }, { header: 'Titre du produit', width: 50 }, { header: 'Prix d’achat HT (€)', width: 20 }];
   ws.getRow(1).font = { bold: true };
   const { layout } = state; const seen = new Set();
   for (const t of state.tasks) {
     if (seen.has(t.row)) continue; seen.add(t.row);
     const row = state.ws.getRow(t.row);
-    ws.addRow([cellText(row.getCell(layout.brandCol)), cellText(row.getCell(layout.titleCol)), null]);
+    ws.addRow([layout.eanCol > 0 ? cellText(row.getCell(layout.eanCol)) : null, cellText(row.getCell(layout.brandCol)), cellText(row.getCell(layout.titleCol)), null]);
   }
-  ws.getColumn(3).numFmt = '#,##0.00 "€"';
+  ws.getColumn(1).numFmt = '@'; ws.getColumn(4).numFmt = '#,##0.00 "€"';
   const blob = new Blob([await wb.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'modele_prix_achat.xlsx'; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);

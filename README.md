@@ -21,13 +21,23 @@ Le premier passage est le plus long : les liens de recherche sont remplacés par
 
 ## Prix conseillé
 
-Sur la page de résultats, déposer en plus le fichier des **prix d'achat** (bouton « Télécharger le modèle à remplir » pour en avoir un pré-rempli avec les produits) : Marque, Titre du produit, Prix d'achat HT (€). Le **coût d'envoi** se saisit sur la page : coût par commande (emballage + transport), nombre moyen de produits par commande et frais de port payés par le client. Coût par produit = (coût par commande − port payé par le client) ÷ produits par commande.
+Après le dépôt du fichier comparatif, déposer le fichier des **prix d'achat** (l'export « État des stocks » de Planity convient) (bouton « Télécharger le modèle à remplir » pour en avoir un pré-rempli avec les produits) : Marque, Titre du produit, Prix d'achat HT (€). Le **coût d'envoi** se saisit sur la page : coût par commande (emballage + transport), nombre moyen de produits par commande et frais de port payés par le client. Option : temps de préparation par commande (min) et coût horaire chargé (€/h) du personnel. Coût par produit = (coût par commande − port payé par le client + temps × coût horaire) ÷ produits par commande.
 
 - **Prix plancher** = (prix d'achat HT + coût d'envoi par produit) × (1 + marge minimum) × (1 + TVA), arrondi au ,99 supérieur.
 - **Prix conseillé** = médiane des concurrents en stock × (1 + positionnement), limitée à ± variation max autour du prix actuel, arrondie au ,99, jamais sous le prix plancher.
 - « Garder » si l'écart avec le prix actuel est inférieur à 1 €.
 - Réglages (positionnement, marge minimum, TVA, variation max, coût d'envoi par commande, produits par commande, port payé par le client) modifiables sur la page ; ils sont mémorisés dans le navigateur.
+- **Boutiques physiques** (option) : prix plancher sans coût d'envoi = prix d'achat HT × (1 + marge minimum) × (1 + TVA) ; prix conseillé boutique = prix conseillé site ± l'écart choisi (%), arrondi au ,99, jamais sous le plancher boutique. Colonnes « Prix plancher boutique » et « Prix conseillé boutique ».
 - Colonnes ajoutées au fichier : Prix d'achat HT, Coût d'envoi, Prix plancher, Prix conseillé, Conseil.
+
+### Correspondance des produits
+
+Pour chaque produit, le prix d'achat est cherché dans cet ordre :
+1. **code-barres / EAN** (colonne « Code-barres » du comparatif ↔ colonne EAN / code-barres du fichier des prix d'achat) ;
+2. **nom exact** (marque + titre, ou titre seul) ;
+3. **nom approché** : mots du titre en commun, sans contenances (80ml, x80…), marque éventuellement abrégée (« ABI » pour Abib). Retenu seulement si la correspondance est nette.
+
+La page indique combien de produits ont été retrouvés par chaque méthode et liste ceux qui n'ont pas de prix d'achat.
 
 ## Format attendu du fichier
 
