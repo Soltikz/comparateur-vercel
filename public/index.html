@@ -4,182 +4,307 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Comparateur de prix — Point n.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <style>
-  :root { --ink:#1d1b19; --muted:#7a736b; --line:#e7e1d9; --bg:#faf7f3; --card:#fff; --ok:#2f7a4f; --warn:#b26b00; --err:#b3261e; }
+  :root {
+    --bg:#f6f1ea; --card:#fffdf9; --ink:#1c1917; --muted:#857a6e; --line:#e8dfd3; --soft:#f1e9de;
+    --accent:#8a6e4b; --ok:#3f7d58; --ok-bg:#eaf3ed; --err:#b4483c; --err-bg:#f8e9e6; --warn:#a86b14; --warn-bg:#fbf1e1;
+    --serif:"Cormorant Garamond", Georgia, serif; --sans:Inter, "Helvetica Neue", Arial, sans-serif;
+    --r:18px; --shadow:0 1px 2px rgba(28,25,23,.04), 0 8px 24px rgba(28,25,23,.05);
+  }
   * { box-sizing:border-box; }
-  body { margin:0; font:15px/1.5 "Helvetica Neue", Arial, sans-serif; color:var(--ink); background:var(--bg); }
-  main { max-width:880px; margin:0 auto; padding:56px 24px 80px; }
-  h1 { font-weight:500; font-size:30px; letter-spacing:-.01em; margin:0 0 6px; }
-  h2 { font-weight:500; font-size:18px; margin:36px 0 12px; }
-  .sub { color:var(--muted); margin:0 0 36px; }
-  .step { display:none; } .step.on { display:block; }
-  #drop { display:block; border:1.5px dashed #c9c0b5; border-radius:16px; padding:56px 24px; text-align:center; background:var(--card); cursor:pointer; transition:.15s; }
-  #drop.over { border-color:var(--ink); background:#f3eee8; }
-  #drop strong { display:block; font-weight:500; font-size:18px; margin-bottom:4px; }
-  #drop span { color:var(--muted); font-size:13px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:24px; }
-  .row { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  body { margin:0; font:15px/1.55 var(--sans); color:var(--ink); background:var(--bg); -webkit-font-smoothing:antialiased; }
   .muted { color:var(--muted); font-size:13px; }
-  button { font:inherit; border:0; border-radius:999px; padding:12px 24px; background:var(--ink); color:#fff; cursor:pointer; }
+  [hidden] { display:none !important; }
+
+  /* En-tête */
+  header { border-bottom:1px solid var(--line); background:rgba(246,241,234,.92); backdrop-filter:blur(8px); position:sticky; top:0; z-index:10; }
+  .bar-in { max-width:1080px; margin:0 auto; padding:16px 28px; display:flex; align-items:center; justify-content:space-between; gap:24px; }
+  .brand { font-family:var(--serif); font-size:28px; font-weight:600; letter-spacing:.01em; line-height:1; }
+  .brand span { color:var(--accent); }
+  .brand small { display:block; font-family:var(--sans); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin-top:6px; font-weight:500; }
+  .stepper { display:flex; gap:6px; list-style:none; margin:0; padding:0; }
+  .stepper li { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); padding:6px 12px; border-radius:999px; }
+  .stepper li b { width:22px; height:22px; border-radius:50%; display:grid; place-items:center; font-size:11px; border:1px solid var(--line); background:var(--card); font-weight:600; }
+  .stepper li.on { color:var(--ink); background:var(--card); box-shadow:var(--shadow); }
+  .stepper li.on b { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .stepper li.done b { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  main { max-width:1080px; margin:0 auto; padding:48px 28px 140px; }
+  .hero h1 { font-family:var(--serif); font-weight:500; font-size:44px; line-height:1.05; margin:0 0 10px; letter-spacing:-.01em; }
+  .hero p { color:var(--muted); margin:0 0 32px; max-width:620px; font-size:16px; }
+  h2 { font-family:var(--serif); font-weight:500; font-size:28px; margin:48px 0 6px; }
+  h2 + .muted { margin:0 0 18px; }
+  h3 { font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:600; margin:0 0 14px; }
+  .step { display:none; animation:fade .3s ease; } .step.on { display:block; }
+  @keyframes fade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+
+  .card { background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:28px; box-shadow:var(--shadow); }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+
+  /* Boutons */
+  button { font:inherit; font-weight:500; border:0; border-radius:999px; padding:13px 26px; background:var(--ink); color:#fff; cursor:pointer; transition:transform .15s, background .15s, opacity .15s; display:inline-flex; align-items:center; gap:10px; }
+  button:hover:not(:disabled) { transform:translateY(-1px); }
   button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  button.ghost:hover { background:var(--soft); }
+  button.accent { background:var(--accent); }
   button:disabled { opacity:.35; cursor:default; }
-  label.check { display:flex; gap:8px; align-items:center; margin-top:16px; font-size:14px; }
-  .bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin:18px 0 10px; }
-  .bar i { display:block; height:100%; width:0; background:var(--ink); transition:width .4s; }
-  .big { font-size:28px; font-weight:500; font-variant-numeric:tabular-nums; }
-  .notice { margin-top:18px; padding:12px 16px; border-radius:10px; background:#fff6e6; color:#7a4a00; font-size:13px; }
-  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
-  .tile { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; }
-  .tile b { display:block; font-size:28px; font-weight:500; }
+  .linkbtn { background:none; color:var(--accent); padding:0; border-radius:0; font-size:13px; text-decoration:underline; text-underline-offset:3px; }
+  .linkbtn:hover { transform:none; }
+  svg.i { width:18px; height:18px; flex:none; }
+
+  /* Dépôt */
+  .drop { display:block; border:1.5px dashed #cdbfae; border-radius:var(--r); padding:64px 24px; text-align:center; background:var(--card); cursor:pointer; transition:.2s; }
+  .drop:hover, .drop.over { border-color:var(--accent); background:#fbf6ef; }
+  .drop .ico { width:56px; height:56px; border-radius:16px; background:var(--soft); display:grid; place-items:center; margin:0 auto 18px; color:var(--accent); }
+  .drop strong { display:block; font-family:var(--serif); font-weight:500; font-size:26px; margin-bottom:4px; }
+  .drop.small { padding:26px 20px; } .drop.small strong { font-size:20px; } .drop.small .ico { width:42px; height:42px; border-radius:12px; margin-bottom:10px; }
+  .feat { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:28px; }
+  .feat div { padding:18px 20px; border:1px solid var(--line); border-radius:14px; background:rgba(255,253,249,.6); }
+  .feat b { display:block; font-weight:600; margin-bottom:2px; }
+
+  /* Formulaires */
+  label.check { display:flex; gap:10px; align-items:center; font-size:14px; cursor:pointer; }
+  input[type=checkbox] { width:18px; height:18px; accent-color:var(--ink); }
+  .fields { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+  .fields label { font-size:12px; color:var(--muted); display:flex; flex-direction:column; justify-content:flex-end; gap:6px; font-weight:500; }
+  .fields label.check { flex-direction:row; align-items:center; justify-content:flex-start; gap:10px; color:var(--ink); font-size:14px; }
+  .fields label.check input { width:18px; flex:none; }
+  .fields input, .fields select { font:inherit; font-size:14px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); width:100%; }
+  .fields input:focus, .fields select:focus { outline:2px solid #d8c6ae; border-color:var(--accent); }
+  .fields input:disabled { background:var(--soft); color:var(--ink); font-weight:600; }
+  .fields .full { grid-column:1 / -1; }
+  .groups { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; margin-top:24px; }
+  .group { border:1px solid var(--line); border-radius:14px; padding:20px; background:#fff; }
+
+  /* Progression */
+  .big { font-family:var(--serif); font-size:52px; font-weight:500; line-height:1; font-variant-numeric:tabular-nums; }
+  .progress { height:10px; background:var(--soft); border-radius:6px; overflow:hidden; margin:26px 0 12px; }
+  .progress i { display:block; height:100%; width:0; background:linear-gradient(90deg, var(--accent), var(--ink)); transition:width .5s; border-radius:6px; }
+  .notice { margin-top:20px; padding:14px 18px; border-radius:12px; background:var(--warn-bg); color:#6e4a12; font-size:13px; display:flex; gap:10px; align-items:flex-start; }
+
+  /* Tuiles */
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px 22px; position:relative; overflow:hidden; }
+  .tile::before { content:""; position:absolute; inset:0 auto 0 0; width:4px; background:var(--line); }
+  .tile b { display:block; font-family:var(--serif); font-size:40px; font-weight:500; line-height:1.1; }
   .tile span { color:var(--muted); font-size:13px; }
-  .tile.ok b { color:var(--ok); } .tile.warn b { color:var(--warn); } .tile.err b { color:var(--err); }
-  table { width:100%; border-collapse:collapse; font-size:14px; background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
-  th, td { text-align:left; padding:10px 14px; border-bottom:1px solid var(--line); }
-  th { font-weight:500; color:var(--muted); font-size:13px; background:#fdfbf9; }
-  td.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .tile.ok::before { background:var(--ok); } .tile.ok b { color:var(--ok); }
+  .tile.err::before { background:var(--err); } .tile.err b { color:var(--err); }
+  .tile.warn::before { background:var(--warn); } .tile.warn b { color:var(--warn); }
+  .tile.wide { grid-column:1 / -1; display:flex; align-items:baseline; gap:14px; }
+
+  /* Tableaux */
+  .tbl { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:auto; max-height:520px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:12px 16px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600; background:#fbf7f1; position:sticky; top:0; z-index:1; }
+  tbody tr:last-child td { border-bottom:0; }
+  tbody tr:hover td { background:#fdf9f4; }
+  td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  td.up, td.down { font-weight:500; }
   .up { color:var(--err); } .down { color:var(--ok); }
-  #error { color:var(--err); margin-top:14px; }
-  .settings { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:20px; }
-  .settings label { font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:4px; }
-  .settings input, .settings select { font:inherit; font-size:14px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); }
-  #drop2 { display:block; border:1.5px dashed #c9c0b5; border-radius:12px; padding:20px; text-align:center; cursor:pointer; }
-  #drop2.over { border-color:var(--ink); background:#f3eee8; }
-  .linkbtn { background:none; color:var(--ink); padding:0; text-decoration:underline; border-radius:0; font-size:13px; }
-  @media (max-width:640px) { .settings { grid-template-columns:repeat(2,1fr); } }
-  @media (max-width:640px) { .tiles { grid-template-columns:repeat(2,1fr); } }
+  .pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:500; background:var(--warn-bg); color:var(--warn); margin:2px 4px 2px 0; }
+
+  /* Barre de téléchargement */
+  .dlbar { position:fixed; left:0; right:0; bottom:0; z-index:20; background:rgba(28,25,23,.96); color:#fff; transform:translateY(110%); visibility:hidden; transition:transform .35s ease, visibility .35s; }
+  .dlbar.on { transform:none; visibility:visible; }
+  .dlbar .bar-in { padding:14px 28px; }
+  .dlbar .muted { color:#bfb4a7; }
+  .dlbar button { background:#fff; color:var(--ink); }
+
+  #error { color:var(--err); margin-top:14px; font-size:14px; }
+  @media (max-width:900px) { .groups, .feat { grid-template-columns:1fr; } .tiles { grid-template-columns:repeat(2,1fr); } .stepper li span { display:none; } .grid2 { grid-template-columns:1fr; } .hero h1 { font-size:34px; } }
 </style>
 </head>
 <body>
-<main>
-  <h1>Comparateur de prix</h1>
-  <p class="sub">Dépose le fichier comparatif : l’outil relève le prix hors promo de chaque concurrent et te montre où tu te situes.</p>
+<header>
+  <div class="bar-in">
+    <div class="brand">Point n<span>.</span><small>Comparateur de prix</small></div>
+    <ol class="stepper" id="stepper">
+      <li data-s="s-upload"><b>1</b><span>Fichier</span></li>
+      <li data-s="s-ready"><b>2</b><span>Réglages</span></li>
+      <li data-s="s-run"><b>3</b><span>Analyse</span></li>
+      <li data-s="s-done"><b>4</b><span>Résultats</span></li>
+    </ol>
+  </div>
+</header>
 
+<main>
   <!-- 1. Dépôt -->
   <section class="step on" id="s-upload">
-    <label id="drop">
+    <div class="hero">
+      <h1>Où se situent nos prix ?</h1>
+      <p>Dépose le fichier comparatif : l’outil relève le prix hors promo de chaque concurrent, repère les ruptures de stock et propose un prix conseillé pour chaque produit.</p>
+    </div>
+    <label class="drop" id="drop">
       <input type="file" id="file" accept=".xlsx,.csv" hidden>
-      <strong>Déposer le fichier</strong>
-      <span>Glisse le fichier Excel (.xlsx) ou CSV ici, ou clique pour le choisir</span>
+      <div class="ico"><svg class="i" style="width:26px;height:26px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></div>
+      <strong>Déposer le fichier comparatif</strong>
+      <span class="muted">Glisse le fichier Excel (.xlsx) ou CSV ici, ou clique pour le choisir</span>
     </label>
-    <p class="muted" style="margin-top:14px">Étape suivante : tu pourras ajouter le fichier des prix d’achat et régler le coût d’envoi pour obtenir un prix conseillé.</p>
     <div id="error"></div>
+    <div class="feat">
+      <div><b>Prix hors promo</b><span class="muted">Le prix barré est retenu quand le concurrent fait une promotion.</span></div>
+      <div><b>Ruptures de stock</b><span class="muted">Les produits indisponibles chez un concurrent sont signalés.</span></div>
+      <div><b>Prix conseillé</b><span class="muted">À partir des prix d’achat, de l’envoi et de la concurrence.</span></div>
+    </div>
   </section>
 
-  <!-- 2. Confirmation -->
+  <!-- 2. Réglages -->
   <section class="step" id="s-ready">
+    <div class="hero"><h1>Prêt à analyser</h1></div>
     <div class="card">
       <div class="row">
         <div>
-          <div id="r-file" style="font-weight:500"></div>
+          <div id="r-file" style="font-family:var(--serif);font-size:24px;font-weight:500"></div>
           <div class="muted" id="r-info"></div>
         </div>
         <button class="ghost" id="change">Changer de fichier</button>
       </div>
-      <label class="check" id="online-wrap" hidden><input type="checkbox" id="online" checked> Uniquement les produits en ligne <span class="muted" id="online-count"></span></label>
-      <div class="row" style="margin-top:24px">
-        <span class="muted" id="r-eta"></span>
-        <button id="start">Lancer l’analyse</button>
-      </div>
+      <label class="check" id="online-wrap" style="margin-top:20px" hidden><input type="checkbox" id="online" checked> Uniquement les produits en ligne <span class="muted" id="online-count"></span></label>
       <div class="notice" id="resume" hidden></div>
+      <div class="row" style="margin-top:24px;padding-top:22px;border-top:1px solid var(--line)">
+        <span class="muted" id="r-eta"></span>
+        <div class="row" style="gap:10px">
+          <button class="ghost" id="skip">Calculer sans relancer l’analyse</button>
+          <button id="start">Lancer l’analyse</button>
+        </div>
+      </div>
     </div>
-    <h2>Prix d’achat et coût d’envoi</h2>
-    <p class="muted" style="margin-top:-6px">Facultatif : dépose le fichier des prix d’achat et règle le coût d’envoi pour obtenir un prix conseillé. Tu pourras aussi le faire après l’analyse.</p>
+    <h2>Prix d’achat et coûts</h2>
+    <p class="muted">Facultatif : pour obtenir un prix conseillé avec un prix plancher. Modifiable aussi après l’analyse.</p>
     <div id="ready-pricing"></div>
-    <p style="margin-top:16px"><button class="ghost" id="skip">Calculer avec les prix déjà dans le fichier (sans relancer l’analyse)</button></p>
   </section>
 
-  <!-- 3. Progression -->
+  <!-- 3. Analyse -->
   <section class="step" id="s-run">
+    <div class="hero"><h1>Analyse en cours</h1></div>
     <div class="card">
       <div class="row">
-        <div><div class="big" id="p-count">0 / 0</div><div class="muted" id="p-eta">Démarrage…</div></div>
+        <div><div class="big" id="p-count">0 / 0</div><div class="muted" id="p-eta" style="margin-top:8px">Démarrage…</div></div>
         <button class="ghost" id="pause">Mettre en pause</button>
       </div>
-      <div class="bar"><i id="p-bar"></i></div>
+      <div class="progress"><i id="p-bar"></i></div>
       <div class="muted" id="p-last">&nbsp;</div>
-      <div class="notice">Garde cet onglet ouvert pendant l’analyse. Si tu le fermes, redépose le même fichier : l’analyse reprendra où elle s’était arrêtée.</div>
+      <div class="notice"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><span>Garde cet onglet ouvert pendant l’analyse. Si tu le fermes, redépose le même fichier : l’analyse reprendra où elle s’était arrêtée.</span></div>
     </div>
   </section>
 
-  <!-- 4. Résultat -->
+  <!-- 4. Résultats -->
   <section class="step" id="s-done">
-    <div class="row">
-      <div class="muted" id="d-info"></div>
-      <button id="download">Télécharger le fichier mis à jour</button>
+    <div class="row hero" style="align-items:flex-end">
+      <div><h1 style="margin:0">Résultats</h1><div class="muted" id="d-info" style="margin-top:8px"></div></div>
+      <button class="dl-btn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg><span class="dl-label">Télécharger le fichier complet</span></button>
     </div>
-    <h2>Positionnement</h2>
+
+    <h2 style="margin-top:8px">Positionnement</h2>
+    <p class="muted">Notre prix comparé à la moyenne des concurrents.</p>
     <div class="tiles">
       <div class="tile ok"><b id="t-cheap">0</b><span>moins chers</span></div>
-      <div class="tile"><b id="t-aligned">0</b><span>alignés (±5 %)</span></div>
+      <div class="tile"><b id="t-aligned">0</b><span>alignés (± 5 %)</span></div>
       <div class="tile err"><b id="t-exp">0</b><span>plus chers</span></div>
       <div class="tile warn"><b id="t-none">0</b><span>sans prix concurrent</span></div>
     </div>
-    <div class="tiles" style="margin-top:12px; grid-template-columns:1fr">
-      <div class="tile warn"><b id="t-oos">0</b><span>produits en rupture chez au moins un concurrent</span></div>
+    <div class="grid2" style="margin-top:20px">
+      <div><h3>Les plus chers face à la concurrence</h3><div class="tbl"><table><thead><tr><th>Produit</th><th class="n">Nous</th><th class="n">Moy.</th><th class="n">Écart</th></tr></thead><tbody id="top-exp"></tbody></table></div></div>
+      <div><h3>Les plus compétitifs</h3><div class="tbl"><table><thead><tr><th>Produit</th><th class="n">Nous</th><th class="n">Moy.</th><th class="n">Écart</th></tr></thead><tbody id="top-cheap"></tbody></table></div></div>
     </div>
+
     <h2>Prix conseillé</h2>
+    <p class="muted">Ajuste les réglages : les conseils se recalculent aussitôt.</p>
     <div id="done-pricing"></div>
   </section>
-  <section hidden>
-    <div class="card" id="pricing">
-      <label id="drop2">
-        <input type="file" id="cost" accept=".xlsx,.csv" hidden>
-        <strong style="font-weight:500">Déposer le fichier des prix d’achat</strong>
-        <div class="muted">Export « État des stocks » de Planity ou tout fichier avec : code-barres (EAN) ou nom du produit, et prix d’achat HT</div>
-      </label>
-      <div class="row" style="margin-top:10px">
-        <span class="muted" id="cost-info">Sans prix d’achat, le conseil se base uniquement sur la concurrence (pas de prix plancher).</span>
-        <button class="linkbtn" id="template">Télécharger le modèle à remplir</button>
-      </div>
-      <div class="settings">
-        <label>Positionnement
-          <select id="set-pos">
-            <option value="-0.05">5 % en dessous</option>
-            <option value="-0.03">3 % en dessous</option>
-            <option value="0" selected>Aligné</option>
-            <option value="0.03">3 % au-dessus</option>
-            <option value="0.05">5 % au-dessus</option>
-          </select>
-        </label>
-        <label>Marge minimum (%)<input type="number" id="set-marge" value="30" min="0" step="1"></label>
-        <label>TVA (%)<input type="number" id="set-tva" value="20" min="0" step="0.1"></label>
-        <label>Variation max (%)<input type="number" id="set-maxvar" value="15" min="1" step="1"></label>
-        <label>Coût d’envoi par commande (€)<input type="number" id="set-envoi" value="11.15" min="0" step="0.01"></label>
-        <label>Produits par commande (moy.)<input type="number" id="set-nbprod" value="3" min="1" step="0.1"></label>
-        <label>Port payé par le client (€)<input type="number" id="set-portclient" value="9.18" min="0" step="0.01"></label>
-        <label>Préparation par commande (min)<input type="number" id="set-prepmin" value="0" min="0" step="1"></label>
-        <label>Coût horaire chargé (€/h)<input type="number" id="set-taux" value="0" min="0" step="0.5"></label>
-        <label>Soit par produit<input type="text" id="set-parprod" disabled></label>
-      </div>
-      <div class="settings">
-        <label style="flex-direction:row;align-items:center;gap:8px;grid-column:span 2;color:var(--ink);font-size:14px">
-          <input type="checkbox" id="set-shop"> Calculer aussi un prix pour les boutiques physiques (sans envoi)
-        </label>
-        <label>Écart boutique / site (%)<input type="number" id="set-shopadj" value="0" step="1"></label>
-      </div>
-    </div>
-  </section>
+
   <section class="step" id="s-done2">
-    <div class="tiles" style="margin-top:12px">
+    <div class="tiles" style="margin-top:20px">
       <div class="tile ok"><b id="a-down">0</b><span>à baisser</span></div>
       <div class="tile"><b id="a-keep">0</b><span>à garder</span></div>
       <div class="tile err"><b id="a-up">0</b><span>à monter</span></div>
       <div class="tile warn"><b id="a-floor">0</b><span>bloqués par le prix plancher</span></div>
     </div>
-    <h2>Changements de prix conseillés</h2>
-    <table><thead><tr><th>Produit</th><th class="n">Actuel</th><th class="n">Médiane conc.</th><th class="n">Plancher</th><th class="n">Conseillé site</th><th class="n shopcol">Conseillé boutique</th><th>Conseil</th></tr></thead><tbody id="advice"></tbody></table>
+    <h3 style="margin-top:24px">Changements de prix conseillés</h3>
+    <div class="tbl"><table><thead><tr><th>Produit</th><th class="n">Actuel</th><th class="n">Médiane conc.</th><th class="n">Plancher</th><th class="n">Conseillé site</th><th class="n shopcol">Conseillé boutique</th><th>Conseil</th></tr></thead><tbody id="advice"></tbody></table></div>
 
-    <h2>Les plus chers par rapport à la concurrence</h2>
-    <table><thead><tr><th>Produit</th><th class="n">Notre prix</th><th class="n">Moy. concurrents</th><th class="n">Écart</th></tr></thead><tbody id="top-exp"></tbody></table>
-    <h2>Les plus compétitifs</h2>
-    <table><thead><tr><th>Produit</th><th class="n">Notre prix</th><th class="n">Moy. concurrents</th><th class="n">Écart</th></tr></thead><tbody id="top-cheap"></tbody></table>
-    <h2>Ruptures de stock chez les concurrents</h2>
-    <table><thead><tr><th>Produit</th><th>En rupture chez</th></tr></thead><tbody id="oos"></tbody></table>
-    <p style="margin-top:32px"><button class="ghost" id="restart">Analyser un autre fichier</button></p>
+    <h2>Ruptures chez les concurrents</h2>
+    <p class="muted">Produits indisponibles chez au moins un concurrent : une occasion de mettre ces références en avant.</p>
+    <div class="tiles"><div class="tile warn wide"><b id="t-oos">0</b><span>produits en rupture chez au moins un concurrent</span></div></div>
+    <div class="tbl" style="margin-top:14px"><table><thead><tr><th>Produit</th><th>En rupture chez</th></tr></thead><tbody id="oos"></tbody></table></div>
+
+    <div class="row" style="margin-top:40px">
+      <button class="ghost" id="restart">Analyser un autre fichier</button>
+      <button class="dl-btn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg><span class="dl-label">Télécharger le fichier complet</span></button>
+    </div>
   </section>
+
+  <!-- Carte des prix d'achat et réglages (déplacée entre l'étape 2 et les résultats) -->
+  <div hidden>
+    <div class="card" id="pricing">
+      <div class="grid2" style="align-items:center">
+        <label class="drop small" id="drop2">
+          <input type="file" id="cost" accept=".xlsx,.csv" hidden>
+          <div class="ico"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 14h6M9 17h4"/></svg></div>
+          <strong>Déposer les prix d’achat</strong>
+          <span class="muted">Export « État des stocks » de Planity ou tout fichier avec code-barres ou nom, et prix d’achat HT</span>
+        </label>
+        <div>
+          <div class="muted" id="cost-info">Sans prix d’achat, le conseil se base uniquement sur la concurrence (pas de prix plancher).</div>
+          <p style="margin:12px 0 0"><button class="linkbtn" id="template">Télécharger le modèle à remplir</button></p>
+        </div>
+      </div>
+      <div class="groups">
+        <div class="group">
+          <h3>Positionnement</h3>
+          <div class="fields">
+            <label class="full">Par rapport aux concurrents
+              <select id="set-pos">
+                <option value="-0.05">5 % en dessous</option>
+                <option value="-0.03">3 % en dessous</option>
+                <option value="0" selected>Aligné</option>
+                <option value="0.03">3 % au-dessus</option>
+                <option value="0.05">5 % au-dessus</option>
+              </select>
+            </label>
+            <label>Marge minimum (%)<input type="number" id="set-marge" value="30" min="0" step="1"></label>
+            <label>TVA (%)<input type="number" id="set-tva" value="20" min="0" step="0.1"></label>
+            <label class="full">Variation max d’un coup (%)<input type="number" id="set-maxvar" value="15" min="1" step="1"></label>
+          </div>
+        </div>
+        <div class="group">
+          <h3>Envoi et préparation</h3>
+          <div class="fields">
+            <label>Coût par commande (€)<input type="number" id="set-envoi" value="11.15" min="0" step="0.01"></label>
+            <label>Port payé client (€)<input type="number" id="set-portclient" value="9.18" min="0" step="0.01"></label>
+            <label>Produits / commande<input type="number" id="set-nbprod" value="3" min="1" step="0.1"></label>
+            <label>Préparation (min)<input type="number" id="set-prepmin" value="0" min="0" step="1"></label>
+            <label>Coût horaire chargé (€/h)<input type="number" id="set-taux" value="0" min="0" step="0.5"></label>
+            <label>Soit par produit<input type="text" id="set-parprod" disabled></label>
+          </div>
+        </div>
+        <div class="group">
+          <h3>Boutiques physiques</h3>
+          <div class="fields">
+            <label class="check full"><input type="checkbox" id="set-shop"> Calculer un prix boutique (sans envoi)</label>
+            <label class="full">Écart boutique / site (%)<input type="number" id="set-shopadj" value="0" step="1"></label>
+          </div>
+          <p class="muted" style="margin:14px 0 0">Ex. −5 pour vendre 5 % moins cher en boutique, +5 pour 5 % plus cher.</p>
+        </div>
+      </div>
+    </div>
+  </div>
 </main>
+
+<div class="dlbar" id="dlbar">
+  <div class="bar-in">
+    <div><strong>Fichier complet prêt</strong><div class="muted" id="dl-info">Prix concurrents, ruptures, prix conseillés et prix boutique.</div></div>
+    <button class="dl-btn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg><span class="dl-label">Télécharger le fichier complet</span></button>
+  </div>
+</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -188,8 +313,13 @@ const AVG_SECONDS = 12; // estimation avant d'avoir des mesures
 
 let state = null; // { wb, ws, isCsv, name, layout, tasks, results, key }
 
+const ORDER = ['s-upload', 's-ready', 's-run', 's-done'];
 function show(step) {
   document.querySelectorAll('.step').forEach((s) => s.classList.toggle('on', s.id === step || (step === 's-done' && s.id === 's-done2')));
+  const idx = ORDER.indexOf(step);
+  document.querySelectorAll('#stepper li').forEach((li, i) => { li.classList.toggle('on', i === idx); li.classList.toggle('done', i < idx); });
+  $('dlbar').classList.toggle('on', step === 's-done');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   const slot = step === 's-ready' ? 'ready-pricing' : step === 's-done' ? 'done-pricing' : null;
   if (slot) $(slot).append($('pricing'));
 }
@@ -459,7 +589,8 @@ function finish() {
   }
   $('t-cheap').textContent = stats.cheap; $('t-aligned').textContent = stats.aligned; $('t-exp').textContent = stats.exp; $('t-none').textContent = stats.none;
   const found = state.tasks.filter((t) => state.results[t.key]?.price != null).length;
-  $('d-info').textContent = `${found} prix relevés sur ${state.tasks.length} liens · ${rows.length} produits`;
+  $('d-info').textContent = `${found} prix relevés sur ${state.tasks.length} liens · ${rows.length} produits · ${state.name}`;
+  document.querySelectorAll('.dl-label').forEach((e) => (e.textContent = `Télécharger le fichier complet (.${state.isCsv ? 'csv' : 'xlsx'})`));
   const fill = (id, list) => {
     $(id).innerHTML = '';
     if (!list.length) { $(id).innerHTML = '<tr><td colspan="4" class="muted">Aucun produit</td></tr>'; return; }
@@ -480,7 +611,9 @@ function finish() {
   if (!outList.length) $('oos').innerHTML = '<tr><td colspan="2" class="muted">Aucune rupture détectée</td></tr>';
   outList.sort((a, b) => b.sites.length - a.sites.length).forEach((o) => {
     const tr = document.createElement('tr'); tr.innerHTML = '<td></td><td></td>';
-    tr.cells[0].textContent = o.label; tr.cells[1].textContent = o.sites.join(', '); $('oos').append(tr);
+    tr.cells[0].textContent = o.label;
+    o.sites.forEach((site) => { const sp = document.createElement('span'); sp.className = 'pill'; sp.textContent = site; tr.cells[1].append(sp); });
+    $('oos').append(tr);
   });
   fill('top-exp', gaps.filter((g) => g.gap > 0.05).sort((a, b) => b.gap - a.gap).slice(0, 10));
   fill('top-cheap', gaps.filter((g) => g.gap < -0.05).sort((a, b) => a.gap - b.gap).slice(0, 10));
@@ -692,7 +825,7 @@ $('template').onclick = async () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 };
 
-$('download').onclick = async () => {
+async function downloadFile() {
   const base = state.name.replace(/\.(csv|xlsx)$/i, '');
   const stamp = new Date().toISOString().slice(0, 10);
   let blob, name;
@@ -710,7 +843,9 @@ $('download').onclick = async () => {
   }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-};
+}
+document.querySelectorAll('.dl-btn').forEach((b) => (b.onclick = downloadFile));
+show('s-upload');
 </script>
 </body>
 </html>
