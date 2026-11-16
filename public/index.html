@@ -133,7 +133,7 @@
 <body>
 <header>
   <div class="bar-in">
-    <div class="brand">Comparateur de prix</div>
+    <div class="brand">Point n<span>.</span><small>Comparateur de prix</small></div>
     <ol class="stepper" id="stepper">
       <li data-s="s-upload"><b>1</b><span>Fichier</span></li>
       <li data-s="s-ready"><b>2</b><span>Réglages</span></li>
@@ -424,7 +424,7 @@ function findLayout(ws) {
     });
     if (pairs.length) {
       const find = (re) => h.findIndex((x) => re.test(x || ''));
-      return { headerRow: r, pairs, brandCol: find(/marque|brand/i), titleCol: find(/titre|title|produit/i), myPriceCol: find(/mon prix|notre prix|prix point/i), statusCol: find(/^statut|status/i), stockCol: find(/rupture/i), eanCol: find(/ean|code.?barre|gtin|barcode/i) };
+      return { headerRow: r, pairs, brandCol: find(/marque|brand/i), titleCol: find(/titre|title|produit/i), myPriceCol: find(/mon prix|notre prix|prix point/i), statusCol: find(/^statut|status/i), stockCol: find(/rupture/i), eanCol: find(/\bean\b|code.?barre|gtin|barcode/i) };
     }
   }
   return null;
@@ -700,7 +700,7 @@ async function loadCosts(file) {
       const find = (re) => h.findIndex((x) => re.test(x || ''));
       const cAchat = find(/achat|co[uû]t|purchase|cost|\bpa\b|pmp/i);
       if (cAchat < 0) continue;
-      const cEan = find(/ean|code.?barre|gtin|barcode/i);
+      const cEan = find(/\bean\b|code.?barre|gtin|barcode/i);
       const cBrand = find(/marque|brand|fournisseur/i);
       const cTitle = h.findIndex((x, i) => i !== cAchat && i !== cEan && /titre|produit|nom|title|libell|d[ée]signation|article/i.test(x || ''));
       const byEan = new Map(), byKey = new Map(), byTitle = new Map(), list = []; let rows = 0;

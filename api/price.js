@@ -2,7 +2,7 @@ import { lookup } from '../lib/scraper.js';
 
 // Seuls les sites concurrents sont autorisés (évite que l'API serve de proxy ouvert)
 const ALLOWED = (process.env.ALLOWED_HOSTS ||
-  'stylevana.com,yesstyle.com,koreanskincare.com,yoonah.fr,kbeauty-cosmetics.com,google.com,google.fr')
+  'yesstyle.com,koreanskincare.com,koreanskincare.nl,yoonah.fr,kbeauty-cosmetics.com,sevenyoung.com,littlewonderland.eu,ksisters.fr,google.com,google.fr')
   .split(',').map((h) => h.trim()).filter(Boolean);
 
 const allowed = (url) => {
